@@ -37,7 +37,8 @@ async def process_file(file: UploadFile = File(...)):
                 [item.split(":")[1] for item in extracted["lab_results"]]
             )
         },
-        "explanation": f"Disease prediction: {analysis['disease_prediction']}"
+        "explanation": f"Disease prediction: {analysis['disease_prediction']}",
+        "audit": analysis["audit"],          
+        "timeline": analysis["timeline"]     
     }
-
     return data
