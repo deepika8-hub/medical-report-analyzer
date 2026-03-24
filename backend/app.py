@@ -2,52 +2,109 @@ from fastapi import FastAPI, UploadFile, File
 import pdfplumber
 from extractor import extract_medical_info
 from analyzer import analyze_lab_results
-from openai import OpenAI
-import os
-from dotenv import load_dotenv
-load_dotenv()
-print("KEY:", os.getenv("OPENAI_API_KEY"))
-api_key = os.getenv("OPENAI_API_KEY")
 
-client = OpenAI(api_key=api_key) if api_key else None
 app = FastAPI()
 
+# ---------------- PDF READER ---------------- #
 def read_pdf(file_path):
     text = ""
     with pdfplumber.open(file_path) as pdf:
         for page in pdf.pages:
             text += page.extract_text() or ""
     return text
-def get_ai_analysis(text):
-    if client is None:
-        return "AI analysis unavailable (API key missing)"
-    try:
-        prompt = f"""
-You are a medical assistant.
 
-Analyze this report and give:
-1. Short patient summary
-2. Risk level (Low/Medium/High)
-3. Key abnormal findings (bullet points)
 
-Report:
-{text}
-"""
+# ---------------- AGENT 1: EXTRACTION ---------------- #
+def extraction_agent(text):
+    return extract_medical_info(text)
 
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
 
-        return response.choices[0].message.content
+# ---------------- AGENT 2: VALIDATION ---------------- #
+def validation_agent(text, extracted):
+    text_lower = text.lower()
 
-    except Exception as e:
-        return f"AI ERROR: {str(e)}"
+    medical_keywords = [
+        "bilirubin", "ast", "alt", "alp",
+        "glucose", "hemoglobin", "creatinine",
+        "hba1c"
+    ]
+
+    # ✅ 1. Must contain at least 2 strong medical keywords
+    keyword_matches = sum(1 for word in medical_keywords if word in text_lower)
+    if keyword_matches < 2:
+        return False, "Not a medical report (insufficient medical terms)"
+
+    # ✅ 2. Strict lab format check → "Test: value"
+    valid_lab_results = []
+    for item in extracted["lab_results"]:
+        if ":" in item:
+            parts = item.split(":")
+            if len(parts) == 2:
+                try:
+                    float(parts[1].strip().split()[0])
+                    valid_lab_results.append(item)
+                except:
+                    continue
+
+    if len(valid_lab_results) < 3:
+        return False, "Invalid lab data format"
+
+    # ✅ 3. Reject if too many unknown tests (noise detection)
+    known_tests = ["bilirubin", "ast", "alt", "alp", "glucose", "hba1c", "creatinine"]
+    unknown_count = 0
+
+    for item in valid_lab_results:
+        if not any(k in item.lower() for k in known_tests):
+            unknown_count += 1
+
+    if unknown_count > len(valid_lab_results) // 2:
+        return False, "Too many unrecognized medical parameters"
+
+    return True, "Valid medical report"
+
+
+# ---------------- AGENT 3: CLINICAL ANALYZER ---------------- #
+def clinical_agent(lab_results):
+    return analyze_lab_results(lab_results)
+
+
+# ---------------- AGENT 4: DECISION AGENT ---------------- #
+def decision_agent(analysis):
+    return analysis["risk_level"], analysis["disease_prediction"]
+
+
+# ---------------- AGENT 5: EXPLANATION AGENT ---------------- #
+def explanation_agent(analysis):
+    explanation = []
+
+    for test, status in analysis["analysis"].items():
+        if status == "High":
+            explanation.append(f"{test} is higher than normal range.")
+        elif status == "Low":
+            explanation.append(f"{test} is lower than normal range.")
+        else:
+            explanation.append(f"{test} is within normal range.")
+
+    return explanation
+
+
+# ---------------- CONFIDENCE SCORE ---------------- #
+def confidence_agent(analysis):
+    total = len(analysis["analysis"])
+    normal = len([v for v in analysis["analysis"].values() if v == "Normal"])
+
+    if total == 0:
+        return 0
+
+    return round((normal / total) * 100, 2)
+
+
+# ---------------- MAIN API ---------------- #
 @app.post("/process")
 async def process_file(file: UploadFile = File(...)):
     content = await file.read()
 
-    # Read file
+    # Step 1: Read file
     if file.filename.endswith(".pdf"):
         with open("temp.pdf", "wb") as f:
             f.write(content)
@@ -55,47 +112,70 @@ async def process_file(file: UploadFile = File(...)):
     else:
         text = content.decode("utf-8")
 
-    # Extract data
-    extracted = extract_medical_info(text)
+    # Step 2: Extraction Agent
+    extracted = extraction_agent(text)
 
-    #  Medical keyword validation
-    medical_keywords = ["bilirubin", "ast", "alt", "alp", "glucose", "protein"]
-    if not any(word in text.lower() for word in medical_keywords):
+    # Step 3: Validation Agent
+    is_valid, message = validation_agent(text, extracted)
+    if not is_valid:
+        return {"error": message}
+
+    # Step 4: Clinical Agent
+    analysis = clinical_agent(extracted["lab_results"])
+        # ---------------- EDGE CASE 1: INSUFFICIENT DATA ---------------- #
+    if len(analysis["analysis"]) < 3:
         return {
-            "error": "File does not appear to be a medical report"
+            "error": "Insufficient data to perform reliable analysis"
         }
 
-    # ✅ Day 3: Lab results validation
-    if len(extracted["lab_results"]) < 3:
+    # ---------------- EDGE CASE 2: CONFLICT DETECTION ---------------- #
+    high_values = [k for k, v in analysis["analysis"].items() if v == "High"]
+    normal_values = [k for k, v in analysis["analysis"].items() if v == "Normal"]
+
+    conflict_flag = False
+    if len(high_values) > 0 and len(normal_values) > 0:
+        conflict_flag = True
+
+    # ---------------- EDGE CASE 3: LOW CONFIDENCE ---------------- #
+    total_tests = len(analysis["analysis"])
+    abnormal_tests = len([v for v in analysis["analysis"].values() if v != "Normal"])
+
+    confidence_score = 0
+    if total_tests > 0:
+        confidence_score = (1 - (abnormal_tests / total_tests)) * 100
+
+    if confidence_score < 40:
         return {
-            "error": "Uploaded file is not a valid medical report"
+            "error": "Low confidence in analysis. Please consult a medical professional."
         }
+    # Step 5: Decision Agent
+    risk, disease = decision_agent(analysis)
 
-    # Analyze data
-    analysis = analyze_lab_results(extracted["lab_results"])
-    ai_output = get_ai_analysis(text)
-    # Dynamic summary
-    summary = f"Patient has {analysis['risk_level']} risk based on {len(analysis['analysis'])} parameters."
+    # Step 6: Explanation Agent
+    explanation = explanation_agent(analysis)
 
-    # Better insights
-    insights = [f"{k} is {v}" for k, v in analysis["analysis"].items()]
+    # Step 7: Confidence Agent
+    confidence = confidence_agent(analysis)
 
-    # Prepare response
-    data = {
-        "summary": ai_output,
-        "risk": analysis["risk_level"],
-        "insights": insights,
+    # Workflow steps (for frontend display)
+    workflow = [
+        "Extraction Completed",
+        "Validation Passed",
+        "Clinical Analysis Done",
+        "Risk Assessment Completed",
+        "Explanation Generated"
+    ]
 
-        "extracted": {
-            k: v.strip() for k, v in zip(
-                [item.split(":")[0] for item in extracted["lab_results"]],
-                [item.split(":")[1] for item in extracted["lab_results"]]
-            )
-        },
-
-        "explanation": f"Disease prediction: {analysis['disease_prediction']}",
+    # Final response
+    return {
+        "summary": f"Patient classified as {risk} risk.",
+        "risk": risk,
+        "confidence": f"{round(confidence_score, 2)}%",
+        "conflict_detected": conflict_flag,
+        "insights": [f"{k}: {v}" for k, v in analysis["analysis"].items()],
+        "explanation": explanation,
+        "extracted": analysis["analysis"],
+        "workflow": workflow,
         "audit": analysis["audit"],
         "timeline": analysis["timeline"]
     }
-
-    return data

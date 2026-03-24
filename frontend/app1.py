@@ -100,11 +100,21 @@ if uploaded_file is not None:
     with st.spinner("🤖 AI analyzing report..."):
         data = call_backend(uploaded_file)
 
-    if data is None or "error" in data:
-        st.error(data["error"] if data and "error" in data else "Backend failed")
+    if data is None:
+        st.error("Backend failed")
+        st.stop()
+
+    if "error" in data:
+        st.error(f"❌ {data['error']}")
         st.stop()
 
     st.success(" Analysis complete!")
+    # ---------------- AGENT WORKFLOW ---------------- #
+    st.markdown("### 🧠 Agent Workflow")
+
+    if "workflow" in data:
+        for step in data["workflow"]:
+            st.write(f"✔ {step}")
     st.markdown("---")
 
     # ---------------- DISPLAY COLUMNS ---------------- #
@@ -121,7 +131,9 @@ if uploaded_file is not None:
             st.warning("🟡 MEDIUM RISK")
         else:
             st.success("🟢 LOW RISK")
-
+            # Confidence Score
+        st.markdown("### 📊 Confidence")
+        st.info(data.get("confidence", "N/A"))
     with col3:
         st.markdown("### 🧪 Parameters")
         st.info(f"{len(data['extracted'])} Checked")
@@ -133,6 +145,12 @@ if uploaded_file is not None:
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.subheader("📊 Key Insights")
+    # ---------------- EXPLANATION ---------------- #
+    st.subheader("🧾 Clinical Explanation")
+
+    if "explanation" in data:
+        for exp in data["explanation"]:
+            st.write(f"• {exp}")
     for insight in data["insights"]:
         if "High" in insight:
             st.error(f"🔴 {insight}")
