@@ -1,190 +1,508 @@
 import streamlit as st
 import requests
+import pandas as pd
 
 # ---------------- PAGE CONFIG ---------------- #
 st.set_page_config(page_title="Clinical AI", layout="wide")
 
-# ---------------- TITLE & STYLE ---------------- #
+# ---------------- STYLE ---------------- #
 st.markdown("""
 <style>
-/* GLOBAL */
-html, body, [class*="css"] {
-    font-family: 'Segoe UI', sans-serif;
-    background-color: #0f172a;
-    color: #e2e8f0;
+
+/* MAIN BACKGROUND */
+.stApp {
+    background: linear-gradient(135deg,#020617,#030712,#020617);
 }
 
-/* MAIN CONTAINER */
+/* REMOVE TOP WHITE BAR */
+header[data-testid="stHeader"] {
+    background: linear-gradient(180deg,#020617,#030712) !important;
+}
+
+/* REMOVE WHITE MAIN AREA */
+.main {
+    background: transparent !important;
+}
+
+/* REMOVE EXTRA TOP SPACE */
+.block-container {
+    padding-top: 1rem !important;
+}
+
+/* SIDEBAR FULL DARK */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg,#020617,#030712,#020617);
+    border-right: 1px solid #111827;
+}
+
+/* REMOVE WHITE SPACE IN SIDEBAR */
+section[data-testid="stSidebar"] > div {
+    background: transparent;
+}
+
+/* SIDEBAR TEXT COLOR */
+section[data-testid="stSidebar"] * {
+    color: #ffffff !important;
+}
+
+/* NAVIGATION BUTTON STYLE */
+div[role="radiogroup"] > label {
+
+    background: linear-gradient(145deg,#030712,#020617);
+
+    padding: 14px;
+
+    margin-bottom: 10px;
+
+    border-radius: 14px;
+
+    border: 1px solid #111827;
+
+    transition: 0.3s;
+
+}
+
+/* HOVER EFFECT */
+div[role="radiogroup"] > label:hover {
+
+    background: linear-gradient(145deg,#111827,#030712);
+
+    border: 1px solid #a855f7;
+
+    transform: translateX(3px);
+
+}
+
+/* SELECTED PAGE TEXT */
+div[role="radiogroup"] input:checked + div {
+
+    color: #ffffff;
+
+    font-weight: 600;
+
+}
+
+/* HEADER CARD */
 .main-box {
-    background: #020617;
-    padding: 30px;
-    border-radius: 16px;
-    border: 1px solid #1e293b;
+
+    background: linear-gradient(120deg,#030712,#020617,#030712);
+
+    padding: 40px;
+
+    border-radius: 20px;
+
+    border: 1px solid #111827;
+
     text-align: center;
+
     margin-bottom: 25px;
+
+    margin-top: 40px;   /* moves box downward */
+
+    box-shadow: 0 0 40px rgba(168,85,247,0.35);
+
+}
+
+/* FORCE DARK MODE FOR UPLOADER (WORKS EVEN IN LIGHT MODE) */
+
+[data-testid="stFileUploader"] {
+    background: linear-gradient(145deg,#020617,#030712) !important;
+    border: 1px dashed #a855f7 !important;
+    border-radius: 16px !important;
+    padding: 18px !important;
+}
+
+/* INNER BOX */
+[data-testid="stFileUploader"] section {
+    background: linear-gradient(145deg,#020617,#030712) !important;
+}
+
+/* DROP ZONE */
+[data-testid="stFileUploaderDropzone"] {
+    background: linear-gradient(145deg,#020617,#030712) !important;
+    border-radius: 14px !important;
+}
+
+/* REMOVE WHITE BACKGROUND */
+[data-testid="stFileUploaderDropzone"] div {
+    background: transparent !important;
+}
+
+/* TEXT COLOR */
+[data-testid="stFileUploaderDropzone"] * {
+    color: white !important;
+}
+
+/* BUTTON STYLE */
+[data-testid="stFileUploaderDropzone"] button {
+    background: linear-gradient(90deg,#a855f7,#ec4899) !important;
+    color: white !important;
+    border-radius: 8px !important;
+    border: none !important;
+}
+
+/* LABEL COLOR */
+label {
+    color: white !important;
 }
 
 /* TITLE */
 .title {
-    font-size: 42px;
+
+    font-size: 46px;
+
     font-weight: 700;
-    color: #38bdf8;
+
+    background: linear-gradient(90deg,#a855f7,#ec4899,#f472b6);
+
+    -webkit-background-clip: text;
+
+    -webkit-text-fill-color: transparent;
+
 }
 
 /* SUBTITLE */
 .subtitle {
+
     font-size: 18px;
-    color: #94a3b8;
+
+    color: #e5e7eb;
+
 }
 
-/* FILE UPLOADER */
-section[data-testid="stFileUploader"] {
-    border: 2px dashed #38bdf8;
+/* SECTION TITLE BAR */
+.blue-bar {
+
+    background: linear-gradient(90deg,#a855f7,#ec4899);
+
+    color: white;
+
+    padding: 16px 26px;
+
+    border-radius: 40px;
+
+    font-size: 22px;
+
+    font-weight: 600;
+
+    margin-bottom: 18px;
+
+    box-shadow: 0 0 20px rgba(236,72,153,0.35);
+
+}
+
+/* SUCCESS */
+.stSuccess {
+
+    background: rgba(34,197,94,0.15);
+
     border-radius: 12px;
-    padding: 15px;
-    background-color: #020617;
+
 }
 
-/* CARDS */
-.card {
-    background: #020617;
-    padding: 20px;
-    border-radius: 14px;
-    border: 1px solid #1e293b;
-    margin-bottom: 15px;
+/* WARNING */
+.stWarning {
+
+    background: rgba(250,204,21,0.15);
+
+    border-radius: 12px;
+
 }
 
-/* HEADINGS */
-h1, h2, h3 {
-    color: #f1f5f9;
+/* ERROR */
+.stError {
+
+    background: rgba(239,68,68,0.15);
+
+    border-radius: 12px;
+
 }
 
-/* SUCCESS / WARNING COLORS */
-.stSuccess { color: #22c55e !important; }
-.stWarning { color: #facc15 !important; }
-.stError { color: #ef4444 !important; }
+/* FILE UPLOADER MAIN BOX */
+section[data-testid="stFileUploader"] {
+
+    background: linear-gradient(145deg,#030712,#020617) !important;
+
+    border: 1px dashed #a855f7 !important;
+
+    border-radius: 16px !important;
+
+    padding: 20px !important;
+
+}
+
+/* REMOVE WHITE INSIDE UPLOADER */
+section[data-testid="stFileUploader"] div {
+
+    background: transparent !important;
+
+    color: white !important;
+
+}
+
+/* UPLOAD BUTTON */
+section[data-testid="stFileUploader"] button {
+
+    background: linear-gradient(90deg,#a855f7,#ec4899) !important;
+
+    color: white !important;
+
+    border-radius: 8px !important;
+
+    border: none !important;
+
+}
+
+/* INFO BOX */
+.stAlert {
+
+    background: linear-gradient(145deg,#030712,#020617);
+
+    border-radius: 12px;
+
+}
+/* FIX WHITE BACKGROUND INSIDE UPLOAD BOX */
+section[data-testid="stFileUploader"] > div {
+
+    background: linear-gradient(145deg,#030712,#020617) !important;
+
+    border-radius: 16px !important;
+
+}
+
+/* DROP AREA */
+div[data-testid="stFileUploaderDropzone"] {
+
+    background: linear-gradient(145deg,#030712,#020617) !important;
+
+    border: 1px dashed #a855f7 !important;
+
+    border-radius: 16px !important;
+
+}
+
+/* REMOVE WHITE BOX INSIDE */
+div[data-testid="stFileUploaderDropzone"] div {
+
+    background: transparent !important;
+
+}
+
+/* TEXT COLOR INSIDE */
+div[data-testid="stFileUploaderDropzone"] * {
+
+    color: #ffffff !important;
+
+}
+
+/* BROWSE BUTTON */
+div[data-testid="stFileUploaderDropzone"] button {
+
+    background: linear-gradient(90deg,#a855f7,#ec4899) !important;
+
+    color: white !important;
+
+    border-radius: 8px !important;
+
+    border: none !important;
+
+}
 
 </style>
 """, unsafe_allow_html=True)
 
+
+
+# ---------------- HEADER ---------------- #
 st.markdown("""
 <div class="main-box">
-    <div class="title"> Clinical Intelligence Engine</div>
-    <div class="subtitle">AI-powered analysis of patient reports</div>
+<div class="title">Clinical Intelligence Engine</div>
+<div class="subtitle">AI-powered analysis of patient reports</div>
 </div>
 """, unsafe_allow_html=True)
-st.caption("Built for ET Gen AI Hackathon • Clinical Decision Support System")
-st.markdown("---")
+
+# ---------------- SIDEBAR ---------------- #
+st.sidebar.markdown("## 🧭 Navigation")
+
+st.sidebar.markdown("""
+### 🏥 Clinical AI
+AI Decision Support System
+""")
+
+page = st.sidebar.radio(
+    "",
+    [
+        "Upload Report",
+        "Patient Summary",
+        "Key Insights",
+        "Clinical Explanation",
+        "Trends",
+        "Extracted Values",
+        "Medical Codes",
+        "Technical Data"
+    ]
+)
 
 # ---------------- FILE UPLOAD ---------------- #
-uploaded_file = st.file_uploader("📂 Upload Patient Report (PDF)", type=["pdf"])
+uploaded_file = st.sidebar.file_uploader(
+    "Upload PDF",
+    type=["pdf"]
+)
 
 def call_backend(file):
     url = "http://127.0.0.1:8000/process"
-    files = {"file": (file.name, file, "application/pdf")}
+
     try:
+        files = {"file": (file.name, file, "application/pdf")}
         response = requests.post(url, files=files)
+
         if response.status_code == 200:
             return response.json()
         else:
-            st.error(f"Backend error: {response.status_code}")
-            return None
+            return {"error": f"Backend error {response.status_code}"}
+
     except Exception as e:
-        st.error(f"Error connecting to backend: {e}")
-        return None
+        return {"error": str(e)}
 
-# ---------------- MAIN LOGIC ---------------- #
-if uploaded_file is not None:
-    st.success("✅ File uploaded successfully!")
 
-    with st.spinner("🤖 AI analyzing report..."):
-        data = call_backend(uploaded_file)
+# ---------------- GET DATA ---------------- #
+if uploaded_file and "data" not in st.session_state:
+    with st.spinner("Analyzing new report..."):
+        st.session_state.data = call_backend(uploaded_file)
 
-    if data is None:
-        st.error("Backend failed")
-        st.stop()
+data = st.session_state.get("data")
+# HANDLE BACKEND ERROR
+if data and "error" in data:
+    st.error(f"❌ {data['error']}")
+    st.stop()
 
-    if "error" in data:
-        st.error(f"❌ {data['error']}")
-        st.stop()
+# ---------------- PAGE CONTENT ---------------- #
 
-    st.success(" Analysis complete!")
-    # ---------------- AGENT WORKFLOW ---------------- #
-    st.markdown("### 🧠 Agent Workflow")
+if page == "Upload Report":
 
-    if "workflow" in data:
-        for step in data["workflow"]:
-            st.write(f"✔ {step}")
-    st.markdown("---")
+    st.info("Upload medical report from sidebar")
 
-    # ---------------- DISPLAY COLUMNS ---------------- #
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("### 📄 Status")
-        st.success("Processed")
 
-    with col2:
-        st.markdown("### ⚠️ Risk Level")
-        if data["risk"] == "High":
-            st.error("🔴 HIGH RISK")
-        elif data["risk"] == "Medium":
-            st.warning("🟡 MEDIUM RISK")
-        else:
-            st.success("🟢 LOW RISK")
-            # Confidence Score
-        st.markdown("### 📊 Confidence")
-        st.info(data.get("confidence", "N/A"))
-    with col3:
-        st.markdown("### 🧪 Parameters")
-        st.info(f"{len(data['extracted'])} Checked")
+elif data is None:
 
-    st.markdown("---")
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("🧠 Patient Summary")
+    st.warning("Please upload report first")
+
+
+# ---------------- SUMMARY ---------------- #
+elif page == "Patient Summary":
+
+    st.markdown('<div class="blue-bar">🧠 Patient Summary</div>',
+                unsafe_allow_html=True)
+
     st.write(data["summary"])
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.subheader("📊 Key Insights")
-    # ---------------- EXPLANATION ---------------- #
-    st.subheader("🧾 Clinical Explanation")
 
-    if "explanation" in data:
-        for exp in data["explanation"]:
-            st.write(f"• {exp}")
+# ---------------- INSIGHTS ---------------- #
+elif page == "Key Insights":
+
+    st.markdown('<div class="blue-bar">📊 Key Insights</div>',
+                unsafe_allow_html=True)
+
     for insight in data["insights"]:
+
         if "High" in insight:
-            st.error(f"🔴 {insight}")
+            st.error(insight)
+
         elif "Low" in insight:
-            st.warning(f"🟡 {insight}")
+            st.warning(insight)
+
         else:
-            st.success(f"🟢 {insight}")
-    import pandas as pd
+            st.success(insight)
 
-    if "timeline" in data:
-        st.subheader("📈 Report Trend")
 
+# ---------------- EXPLANATION ---------------- #
+elif page == "Clinical Explanation":
+
+    st.markdown('<div class="blue-bar">🧾 Clinical Explanation</div>',
+                unsafe_allow_html=True)
+
+    for exp in data["explanation"]:
+        st.write("•", exp)
+
+
+# ---------------- TREND ---------------- #
+elif page == "Trends":
+
+    st.markdown('<div class="blue-bar">📈 Report Trend</div>',
+                unsafe_allow_html=True)
+
+    if "timeline" in data and len(data["timeline"]) > 0:
         df = pd.DataFrame(data["timeline"])
         st.line_chart(df.set_index("test"))
-    st.subheader("📄 Extracted Report Values")
+    else:
+        st.warning("No trend data available")
+
+
+# ---------------- VALUES ---------------- #
+elif page == "Extracted Values":
+
+    st.markdown('<div class="blue-bar">📄 Extracted Values</div>',
+                unsafe_allow_html=True)
+
     for key, value in data["extracted"].items():
+
         if key.lower() in ["glucose", "cholesterol"]:
-            st.error(f"🔴 {key}: {value}")
+            st.error(f"{key}: {value}")
+
         elif key.lower() == "hemoglobin":
-            st.warning(f"🟡 {key}: {value}")
+            st.warning(f"{key}: {value}")
+
         else:
-            st.success(f"🟢 {key}: {value}")
+            st.success(f"{key}: {value}")
+elif page == "Medical Codes":
 
-    st.markdown("---")
-    st.subheader("💡 Why this Risk?")
-    st.info(data["explanation"])
+    st.markdown('<div class="blue-bar">🏷 Medical Coding (ICD-10 & CPT)</div>',
+                unsafe_allow_html=True)
 
-    st.markdown("---")
-    with st.expander("🔍 View Full Technical Data"):
-        st.json(data)
+    # ---------------- ICD CODES ---------------- #
+    st.subheader("🧾 ICD-10 Codes (Diagnosis)")
 
-else:
-    st.info("👆 Upload a patient report to begin analysis")
+    if data.get("icd_codes"):
+        for code in data["icd_codes"]:
+            st.success(f"{code['code']} — {code['description']}")
+    else:
+        st.info("No diagnosis codes assigned (all values normal)")
+
+    # ---------------- CPT CODES ---------------- #
+    st.subheader("🧪 CPT Codes (Tests Performed)")
+
+    if data.get("cpt_codes"):
+        for code in data["cpt_codes"]:
+            st.info(f"{code['code']} — {code['description']}")
+    else:
+        st.warning("No CPT codes detected")
+
+    # ---------------- CLARIFICATION ---------------- #
+    if data.get("clarification_needed"):
+
+        st.markdown("### ⚠️ Clarification Required")
+
+        st.error(
+            "Some lab values could not be mapped clearly. "
+            "Medical review is recommended before final coding."
+        )
+
+    # ---------------- REASONING ---------------- #
+    st.markdown("### 🧠 Coding Reasoning")
+
+    if data.get("coding_reasoning"):
+        for r in data["coding_reasoning"]:
+            st.write(f"• {r}")
+
+# ---------------- RAW JSON ---------------- #
+elif page == "Technical Data":
+
+    st.markdown('<div class="blue-bar">🔍 Technical Data</div>',
+                unsafe_allow_html=True)
+
+    st.json(data)
+
 
 # ---------------- FOOTER ---------------- #
-st.markdown("---")
-st.caption("🚀 Designed to reduce doctor workload and improve patient safety")
+st.sidebar.markdown("---")
+st.sidebar.caption("Clinical AI System")

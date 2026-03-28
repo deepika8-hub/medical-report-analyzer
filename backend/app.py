@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 import pdfplumber
 from extractor import extract_medical_info
 from analyzer import analyze_lab_results
-
+from coder import coding_agent
 app = FastAPI()
 
 # ---------------- PDF READER ---------------- #
@@ -122,6 +122,7 @@ async def process_file(file: UploadFile = File(...)):
 
     # Step 4: Clinical Agent
     analysis = clinical_agent(extracted["lab_results"])
+    coding = coding_agent(analysis, extracted)
         # ---------------- EDGE CASE 1: INSUFFICIENT DATA ---------------- #
     if len(analysis["analysis"]) < 3:
         return {
@@ -174,6 +175,10 @@ async def process_file(file: UploadFile = File(...)):
         "conflict_detected": conflict_flag,
         "insights": [f"{k}: {v}" for k, v in analysis["analysis"].items()],
         "explanation": explanation,
+        "icd_codes": coding["icd_codes"],
+        "cpt_codes": coding["cpt_codes"],
+        "coding_reasoning": coding["coding_reasoning"],
+        "clarification_needed": coding["clarification_needed"],
         "extracted": analysis["analysis"],
         "workflow": workflow,
         "audit": analysis["audit"],
