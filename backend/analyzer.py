@@ -11,20 +11,93 @@ def analyze_lab_results(lab_results):
         "alp": (35, 104),
         "glucose": (70, 140),
         "hba1c": (4, 5.7),
-        "creatinine": (0.6, 1.2)
+        "creatinine": (0.6, 1.2),
+
+        # ✅ ADDED (IMPORTANT FIX)
+        "hemoglobin": (12, 17),
+        "packed cell volume": (36, 50),
+        "mean corpuscular volume": (80, 100),
+        "monocytes": (2, 8),
+        "white blood cells": (4000, 11000),
+        "red blood cells": (4, 6),
+        "oncology_flag": (0,0),
+        "cea": (0,5),
+        "afp": (0,8),
+        "ca 19-9": (0,37),
+        "ldh": (100,250),
+        "platelets": (150000, 450000)
     }
 
     for item in lab_results:
-        item_lower = item.lower()
-        test_name = item.split(":")[0].strip()
+        parts = item.split(":")
+        if len(parts) != 2:
+            continue
 
+        item_lower = item.lower()
+        test_name = parts[0].strip()
+
+        VALID_TESTS = [
+
+    # CBC
+                    "hemoglobin",
+                    "white blood cells",
+                    "wbc",
+                    "red blood cells",
+                    "rbc",
+                    "platelet",
+                    "platelets",
+                    "packed cell volume",
+                    "pcv",
+                    "mean corpuscular volume",
+                    "mcv",
+                    "monocytes",
+
+                    # liver / kidney / metabolic
+                    "bilirubin",
+                    "ast",
+                    "alt",
+                    "alp",
+                    "glucose",
+                    "creatinine",
+                    "urea",
+                    "protein",
+
+                    # oncology markers
+                    "ldh",
+                    "cea",
+                    "afp",
+                    "ca 19-9",
+                    "ca19-9",
+                    "tumor",
+                    "oncology",
+                    "ki-67",
+                    "her2",
+                    "er",
+                    "pr"
+                ]
+
+        # ❌ Reject non-medical noise
+        if not any(valid in test_name.lower() for valid in VALID_TESTS):
+            audit.append(f"{test_name} → Rejected (not medical test)")
+            continue
+
+        if len(test_name) < 3 or any(char.isdigit() for char in test_name):
+            audit.append(f"{test_name} → Invalid test name")
+            continue
+
+        # ✅ FIXED VALUE PARSING
         try:
-            value = float(item.split(":")[1])
+            value = float(parts[1].strip().split()[0])
         except:
             audit.append(f"Skipped invalid: {item}")
             continue
 
-        # ✅ timeline inside loop
+        # 🚨 VALIDATION (kept same position)
+        if value > 1000000 or value < 0:
+            audit.append(f"{test_name}: {value} → Invalid value detected")
+            continue
+
+        # ✅ timeline
         timeline.append({
             "test": test_name,
             "value": value
@@ -32,9 +105,9 @@ def analyze_lab_results(lab_results):
 
         matched = False
 
-        # ✅ match correct test
+        # ✅ IMPROVED MATCHING
         for key, (low, high) in NORMAL_RANGES.items():
-            if key in item_lower:
+            if key in item_lower or key in test_name.lower():
                 matched = True
 
                 if value < low:
@@ -51,16 +124,32 @@ def analyze_lab_results(lab_results):
                     analysis[test_name] = "Normal"
                     audit.append(f"{test_name}: {value} within range → Normal")
 
+                # -------- Cancer severity boost --------
+                if any(marker in test_name.lower() for marker in [
+                    "ldh",
+                    "cea",
+                    "afp",
+                    "ca 19-9",
+                    "ki-67"
+                ]):
+                    risk_score += 2
+                    audit.append(f"{test_name} flagged as oncology marker → risk increased")
+                    # cancer keyword boost
+                if "oncology_flag" in test_name.lower():
+
+                    analysis[test_name] = "High"
+
+                    risk_score += 4
+
+                    audit.append("Oncology keyword detected → High risk")
                 break
 
-        # ✅ if no rule matched
+        # ✅ fallback
         if not matched:
             analysis[test_name] = "Normal"
             audit.append(f"{test_name}: {value} → No rule applied")
 
     # ✅ risk summary
-    high_risk_tests = [k for k, v in analysis.items() if v == "High"]
-
     if risk_score >= 5:
         risk_level = "High"
         disease = "Serious Condition"

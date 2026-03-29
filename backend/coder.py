@@ -11,14 +11,18 @@ def coding_agent(analysis, extracted):
         "bilirubin": ("K76", "Liver Disease"),
         "ast": ("K76", "Liver Disorder"),
         "alt": ("K76", "Liver Disorder"),
-    }
-
-    # ✅ extend ICD
-    ICD_MAP.update({
         "alp": ("K76", "Liver Disorder"),
         "protein": ("E88", "Metabolic Disorder"),
-        "globulin": ("E88", "Protein Disorder")
-    })
+        "globulin": ("E88", "Protein Disorder"),
+        "hemoglobin": ("D64", "Anemia"),
+        "red blood cells": ("D64", "Anemia"),
+        "mean corpuscular volume": ("D64", "Anemia"),
+        "urea": ("N18", "Kidney Disorder"),
+        "egfr": ("N18", "Kidney Disorder"),
+        "uric acid": ("E79", "Hyperuricemia"),
+        "glucose": ("E11", "Type 2 Diabetes"),
+        "hba1c": ("E11", "Diabetes Mellitus"),
+    }
 
     CPT_MAP = {
         "glucose": ("82947", "Glucose Test"),
@@ -29,20 +33,28 @@ def coding_agent(analysis, extracted):
         "alt": ("84460", "ALT Test"),
         "alp": ("84075", "ALP Test"),
         "protein": ("84155", "Total Protein Test"),
-        "globulin": ("84165", "Protein Electrophoresis")
+        "globulin": ("84165", "Protein Electrophoresis"),
+
+        # ✅ ADDED (IMPORTANT)
+        "hemoglobin": ("85018", "Hemoglobin Test"),
+        "wbc": ("85048", "White Blood Cell Count"),
+        "rbc": ("85041", "Red Blood Cell Count"),
+        "platelet": ("85049", "Platelet Count"),
+        "packed cell volume": ("85014", "Hematocrit Test"),
+        "mean corpuscular volume": ("85027", "CBC Panel"),
+        "monocytes": ("85025", "Differential Count")
     }
 
-    # ✅ MAIN LOOP (fixed)
     for test, status in analysis["analysis"].items():
         test_lower = test.lower()
         matched = False
 
-        # ❗ special handling (kept your logic)
+        # ✅ Special case (fixed)
         if "globulin" in test_lower:
-            reasoning.append(f"{test} is Normal → part of protein panel, no separate CPT code")
+            reasoning.append(f"{test} is Normal → part of protein panel")
             continue
 
-        for key in ICD_MAP:
+        for key in CPT_MAP:
             if key in test_lower:
                 matched = True
 
@@ -54,7 +66,7 @@ def coding_agent(analysis, extracted):
                 })
 
                 # ✅ ICD ONLY IF ABNORMAL
-                if status in ["High", "Low"]:
+                if key in ICD_MAP and status in ["High", "Low"]:
                     icd_code, icd_desc = ICD_MAP[key]
                     icd_codes.append({
                         "code": icd_code,
@@ -66,7 +78,7 @@ def coding_agent(analysis, extracted):
                     )
                 else:
                     reasoning.append(
-                        f"{test} is Normal → no disease code assigned"
+                        f"{test} is {status} → no disease code assigned"
                     )
 
                 break
